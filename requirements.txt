@@ -1,0 +1,12 @@
+torch
+torchvision
+scikit-learn
+seaborn
+pillow
+numpy
+pandas
+matplotlib
+albumentations
+kornia
+kaggle
+dotenv
