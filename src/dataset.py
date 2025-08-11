@@ -8,23 +8,9 @@ import random
 import kornia.augmentation as K
 import os
 
-# Diccionario para mapear colores RGB a clases
-id_to_class = {
-    50: 0,
-    11: 1,
-    21: 2,
-    13: 3,
-    12: 4,
-    31: 5,
-    23: 6,
-    24: 7,
-    25: 8,
-    32: 9,
-    22: 10,
-    33: 11,
-    5: 12
-}
-#Devuelve la bounding box que contiene todo excepto el fondo (clase 0).
+# FUNCIONES AUXILIARES PARA EL PREPROCESAMIENTO
+
+#Devuelve la bounding box que contiene everything excepto el fondo (clase 0).
 #Añade un pequeño margen para no cortar justo al borde.
 def get_foreground_bbox(mask, margin=10):
     mask_copy = mask.clone()
@@ -381,6 +367,8 @@ normal_augmentations = [
 normal_transform = TransformImages(normal_augmentations)
 
 special_transform = TransformImages(special_augmentations)
+
+#CLASE QUE DEFINE NUESTRO DATASET APLICANDO EL PREPROCESAMIENTO DE ARRIBA
 
 class CustomImageDataset(Dataset):
     def __init__(self, dataset_path, normal_transform=None, special_transform=None):
