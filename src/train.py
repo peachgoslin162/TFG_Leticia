@@ -2,15 +2,25 @@ import sys
 import os
 import torch as t
 
-
-#Bucle de entrenamiento para 1 epoch
 def train_loop(train_dataloader, model, loss_fn, optimizer, device):
-    running_loss = 0.0  # Para llevar el seguimiento de la pérdida
-    batch_num = len(train_dataloader) #Número total de batches
-    train_dataset_size = len(train_dataloader.dataset) #Número total de imagenes en el dataset de entrenamiento
-    batch_size = train_dataloader.batch_size #Tamaño del batch
-    model.train()
+    """
+    Ejecuta una época de entrenamiento sobre los datos.
 
+    Args:
+        train_dataloader (DataLoader): DataLoader para el conjunto de entrenamiento.
+        model (nn.Module): Modelo a entrenar.
+        loss_fn (func): Función de pérdida.
+        optimizer (Optimizer): Optimizador.
+        device (torch.device): Dispositivo (CPU/GPU).
+
+    Returns:
+        float: Pérdida promedio durante la época.
+    """
+    running_loss = 0.0  # Para llevar el seguimiento de la pérdida
+    batch_num = len(train_dataloader)  # Número total de batches
+    train_dataset_size = len(train_dataloader.dataset)  # Número total de imágenes en el dataset de entrenamiento
+    batch_size = train_dataloader.batch_size  # Tamaño del batch
+    model.train()
 
     for batch, (X, y) in enumerate(train_dataloader):
         X, y = X.to(device), y.to(device)
@@ -25,7 +35,6 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
             print(f"Loss demasiado alta: {loss.item()}")
             sys.exit()  # Detiene todo el script
 
-
         # Backpropagation
         loss.backward()
         optimizer.step()
@@ -33,7 +42,7 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
 
         running_loss += loss.item()
 
-        #print important data
+        # Imprimir datos importantes
         if batch % 100 == 0 or batch == batch_num - 1:
             avg_loss = running_loss / (batch + 1)
             current_processed_data = min((batch + 1) * batch_size, train_dataset_size)
@@ -44,6 +53,22 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
 
 
 def test_loop(val_dataloader, model, loss_fn, device, use_tta=False):
+    """
+    Ejecuta la evaluación del modelo en un conjunto de validación.
+
+    Args:
+        val_dataloader (DataLoader): DataLoader para validación.
+        model (nn.Module): Modelo a evaluar.
+        loss_fn (func): Función de pérdida.
+        device (torch.device): Dispositivo (CPU/GPU).
+        use_tta (bool): Flag para usar test-time augmentation (no implementado aquí).
+
+    Returns:
+        tuple:
+            - avg_val_loss (float): Pérdida promedio en validación.
+            - pixel_percentage (float): Precisión a nivel de píxel.
+            - mean_iou (list): Lista con IoU promedio por clase.
+    """
     val_loss = 0.0
     total_pixels, correct_pixels = 0, 0
     batch_num = len(val_dataloader)
@@ -74,7 +99,6 @@ def test_loop(val_dataloader, model, loss_fn, device, use_tta=False):
                 fig_pred.savefig(pred_path)
                 plt.close(fig_pred)
                 print(f"Comparación visual guardada como {pred_path}")
-
 
             y = fnn.interpolate(y.unsqueeze(1).float(), size=pred.shape[2:], mode="nearest").squeeze(1).long()
             loss = loss_fn(pred, y)
@@ -112,5 +136,3 @@ def test_loop(val_dataloader, model, loss_fn, device, use_tta=False):
         print(f"Clase {idx:2d}: IoU = {iou_value:.4f}")
 
     return avg_val_loss, pixel_percentage, mean_iou
-
-

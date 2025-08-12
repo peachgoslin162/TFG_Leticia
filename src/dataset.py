@@ -7,20 +7,26 @@ import torchvision.transforms.functional as F
 import random
 import kornia.augmentation as K
 import os
+import config
 
-# FUNCIONES AUXILIARES PARA EL PREPROCESAMIENTO
-
-#Devuelve la bounding box que contiene everything excepto el fondo (clase 0).
-#Añade un pequeño margen para no cortar justo al borde.
 def get_foreground_bbox(mask, margin=10):
+    """
+    Devuelve la bounding box que contiene todito excepto el fondo (clase 0).
+    Añade un margen para evitar recortes muy ajustados.
+
+    Parámetros:
+        mask (Tensor): máscara con etiquetas de clase.
+        margin (int): margen a añadir alrededor de la bounding box.
+
+    Retorna:
+        tuple o None: (top, left, bottom, right) si hay primer plano, None si no.
+    """
     mask_copy = mask.clone()
-
     mask_copy = format_mask(mask_copy)
-
     foreground = mask_copy != 0
 
     if foreground.sum() == 0:
-        return None  # Imagen totalmente negra
+        return None
 
     coords = foreground.nonzero(as_tuple=False)
     top = max(coords[:, 0].min().item() - margin, 0)
@@ -28,13 +34,25 @@ def get_foreground_bbox(mask, margin=10):
     left = max(coords[:, 1].min().item() - margin, 0)
     right = min(coords[:, 1].max().item() + margin, mask.shape[2] - 1)
 
-    # Validación para evitar errores
     if bottom <= top or right <= left:
         return None
 
     return top, left, bottom, right
 
-def crop_foreground_and_resize(image, mask, output_size=(360, 640)):
+
+def crop_foreground_and_resize(image, mask, output_size=config.DESIRED_IMAGE_SIZE):
+    """
+    Recorta la imagen y máscara alrededor del primer plano y redimensiona al tamaño deseado.
+    Si no hay primer plano, redimensiona toda la imagen y máscara.
+
+    Parámetros:
+        image (Tensor): imagen original.
+        mask (Tensor): máscara con etiquetas.
+        output_size (tuple): tamaño deseado para la salida (alto, ancho).
+
+    Retorna:
+        tuple: (imagen redimensionada, máscara redimensionada).
+    """
     bbox = get_foreground_bbox(mask)
     if bbox is None:
         image = transforms.Resize(output_size, interpolation=InterpolationMode.BILINEAR)(image)
@@ -50,18 +68,37 @@ def crop_foreground_and_resize(image, mask, output_size=(360, 640)):
 
     return image_resized, mask_resized
 
-#Función que convierte la máscara watershed con id de clases basados en su RGB a una máscara de clases (0-12)
+
 def format_mask(mask):
+    """
+    Convierte una máscara RGB en una máscara de etiquetas numéricas según un mapa de colores a clases.
+
+    Parámetros:
+        mask (Tensor): máscara en formato CxHxW.
+
+    Retorna:
+        Tensor: máscara con valores enteros que representan clases.
+    """
     mask = mask.permute(1, 2, 0)[:, :, 0]
 
     class_mask = t.zeros((mask.shape[0], mask.shape[1]), dtype=t.long)
-
-    for color_value, class_index in id_to_class.items():
+    for color_value, class_index in config.ID_TO_CLASS.items():
         class_mask[mask == color_value] = class_index
 
     return class_mask
 
+
 def maybe_apply(transform_fn, p=0.5):
+    """
+    Envuelve una función de transformación para que se aplique con probabilidad p.
+
+    Parámetros:
+        transform_fn (func): función que aplica una transformación.
+        p (float): probabilidad de aplicar la transformación.
+
+    Retorna:
+        func: función que aplica la transformación con probabilidad p.
+    """
     def wrapped(image, mask):
         if random.random() < p:
             return transform_fn(image, mask)
@@ -69,16 +106,26 @@ def maybe_apply(transform_fn, p=0.5):
     wrapped.__name__ = transform_fn.__name__
     return wrapped
 
-#Devuelve la bounding box [top, left, bottom, right] que contiene las clases dadas.
-def get_bounding_box(mask, target_classes = [7,8,11,12]):
+
+def get_bounding_box(mask, target_classes=config.TARGET_CLASSES):
+    """
+    Devuelve la bounding box que contiene todas las clases especificadas.
+
+    Parámetros:
+        mask (Tensor): máscara con etiquetas.
+        target_classes (list): lista de clases a incluir en la bbox.
+
+    Retorna:
+        tuple o None: (top, left, bottom, right) o None si no hay clases objetivo.
+    """
     indices = t.zeros_like(mask, dtype=t.bool)
     for cls in target_classes:
         indices |= (mask == cls)
 
     if indices.sum() == 0:
-        return None  # No hay píxeles de esas clases
+        return None
 
-    coords = indices.nonzero(as_tuple=False)  # (N, 2): filas y columnas
+    coords = indices.nonzero(as_tuple=False)
     top = coords[:, 0].min().item()
     bottom = coords[:, 0].max().item()
     left = coords[:, 1].min().item()
@@ -87,12 +134,21 @@ def get_bounding_box(mask, target_classes = [7,8,11,12]):
     return top, left, bottom, right
 
 
-#Reduce la imagen y la máscara a un 75% de su tamaño original
 def resize_quarter(image, mask):
-    orig_height, orig_width = image.shape[1], image.shape[2] #Shape: (C, H, W)
+    """
+    Reduce la imagen y máscara a un 75% de su tamaño original.
 
-    new_height = int(orig_height * (3/4))
-    new_width = int(orig_width * (3/4))
+    Parámetros:
+        image (Tensor): imagen original.
+        mask (Tensor): máscara original.
+
+    Retorna:
+        tuple: imagen y máscara redimensionadas.
+    """
+    orig_height, orig_width = image.shape[1], image.shape[2]
+
+    new_height = int(orig_height * 3 / 4)
+    new_width = int(orig_width * 3 / 4)
 
     resize_transform_img = Resize((new_height, new_width), interpolation=InterpolationMode.BILINEAR)
     image = resize_transform_img(image)
@@ -102,100 +158,151 @@ def resize_quarter(image, mask):
 
     return image, mask
 
-# Clase personalizada para aplicar las transformaciones a imagen y máscara
+
 class TransformImages:
+    """
+    Aplica una lista de transformaciones a una imagen y máscara.
+
+    Atributos:
+        augmentations (list): lista de funciones de transformación.
+    """
+
     def __init__(self, augmentations):
         self.augmentations = augmentations
 
     def __call__(self, image, mask):
-        applied_transforms = []  # Aquí guardamos el nombre de las transformaciones
+        """
+        Aplica todas las transformaciones en orden.
+
+        Parámetros:
+            image (Tensor): imagen a transformar.
+            mask (Tensor): máscara a transformar.
+
+        Retorna:
+            tuple: imagen transformada, máscara transformada, lista de nombres de transformaciones aplicadas.
+        """
+        applied_transforms = []
         for transform in self.augmentations:
             transform_name = transform.__name__
             image, mask = transform(image, mask)
             applied_transforms.append(transform_name)
         return image, mask, applied_transforms
 
-# Las transformaciones deben ser definidas manualmente, ya que necesitamos
-# aplicar las mismas transformaciones a la imagen y la máscara.
+
 def random_rotation(image, mask, max_angle=25):
+    """
+    Aplica una rotación aleatoria a imagen y máscara con ángulo máximo dado.
+
+    Parámetros:
+        image (Tensor): imagen a rotar.
+        mask (Tensor): máscara a rotar.
+        max_angle (int): ángulo máximo de rotación en grados.
+
+    Retorna:
+        tuple: imagen y máscara rotadas.
+    """
     angle = random.uniform(-max_angle, max_angle)
     image = transforms.functional.rotate(image, angle, interpolation=InterpolationMode.BILINEAR)
     mask = transforms.functional.rotate(mask, angle, interpolation=InterpolationMode.NEAREST)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {random_rotation.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
     return image, mask
+
 
 def random_horizontal_flip(image, mask):
+    """
+    Aplica un volteo horizontal a imagen y máscara.
+
+    Parámetros:
+        image (Tensor): imagen a voltear.
+        mask (Tensor): máscara a voltear.
+
+    Retorna:
+        tuple: imagen y máscara volteadas horizontalmente.
+    """
     image = transforms.functional.hflip(image)
     mask = transforms.functional.hflip(mask)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {random_horizontal_flip.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
     return image, mask
+
 
 def random_vertical_flip(image, mask):
+    """
+    Aplica un volteo vertical a imagen y máscara.
+
+    Parámetros:
+        image (Tensor): imagen a voltear.
+        mask (Tensor): máscara a voltear.
+
+    Retorna:
+        tuple: imagen y máscara volteadas verticalmente.
+    """
     image = transforms.functional.vflip(image)
     mask = transforms.functional.vflip(mask)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {random_vertical_flip.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
     return image, mask
 
-# Función para aplicar un random crop con el mismo tamaño a la imagen y la máscara
-def random_crop(image, mask, crop_size=[320,320,3]):
-    # Obtener la altura y el ancho de la imagen
+
+def random_crop(image, mask, crop_size=config.CROP_SIZE):
+    """
+    Aplica un recorte aleatorio y redimensiona de nuevo al tamaño original.
+
+    Parámetros:
+        image (Tensor): imagen a recortar.
+        mask (Tensor): máscara a recortar.
+        crop_size (tuple): tamaño del recorte (alto, ancho).
+
+    Retorna:
+        tuple: imagen y máscara recortadas y redimensionadas.
+    """
     height, width = image.shape[1], image.shape[2]
 
-    # Generar los límites del crop aleatorio
     top = random.randint(0, height - crop_size[0])
     left = random.randint(0, width - crop_size[1])
 
-    # Aplicar el mismo crop tanto a la imagen como a la máscara
     image_cropped = image[:, top:top + crop_size[0], left:left + crop_size[1]]
     mask_cropped = mask[:, top:top + crop_size[0], left:left + crop_size[1]]
 
-    # Asegurarnos de que las dimensiones de la imagen y la máscara sean consistentes
-    image_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.BILINEAR)(image_cropped)
-    mask_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.NEAREST)(mask_cropped)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {random_crop.__name__}")
-      visualize_with_legend(image_cropped, format_mask(mask_cropped.clone()))
-    '''
+    image_cropped = transforms.Resize((height, width), interpolation=InterpolationMode.BILINEAR)(image_cropped)
+    mask_cropped = transforms.Resize((height, width), interpolation=InterpolationMode.NEAREST)(mask_cropped)
+
     return image_cropped, mask_cropped
 
-def strong_random_crop(image, mask, crop_size=[192,192,3]):
-    # Obtener la altura y el ancho de la imagen
+
+def strong_random_crop(image, mask, crop_size=config.STRONG_CROP_SIZE):
+    """
+    Aplica un recorte aleatorio más grande que random_crop y redimensiona al tamaño original.
+
+    Parámetros:
+        image (Tensor): imagen a recortar.
+        mask (Tensor): máscara a recortar.
+        crop_size (tuple): tamaño del recorte fuerte (alto, ancho).
+
+    Retorna:
+        tuple: imagen y máscara recortadas y redimensionadas.
+    """
     height, width = image.shape[1], image.shape[2]
 
-    # Generar los límites del crop aleatorio
     top = random.randint(0, height - crop_size[0])
     left = random.randint(0, width - crop_size[1])
 
-    # Aplicar el mismo crop tanto a la imagen como a la máscara
     image_cropped = image[:, top:top + crop_size[0], left:left + crop_size[1]]
     mask_cropped = mask[:, top:top + crop_size[0], left:left + crop_size[1]]
 
-    # Asegurarnos de que las dimensiones de la imagen y la máscara sean consistentes
-    image_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.BILINEAR)(image_cropped)
-    mask_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.NEAREST)(mask_cropped)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {strong_random_crop.__name__}")
-      visualize_with_legend(image_cropped, format_mask(mask_cropped.clone()))
-    '''
+    image_cropped = transforms.Resize((height, width), interpolation=InterpolationMode.BILINEAR)(image_cropped)
+    mask_cropped = transforms.Resize((height, width), interpolation=InterpolationMode.NEAREST)(mask_cropped)
+
     return image_cropped, mask_cropped
 
 
-def crop_around_bbox(image, mask, crop_size=(360, 640)):
+def crop_around_bbox(image, mask, crop_size=config.CROP_SIZE):
+    """
+    Recorta la imagen y máscara centrados alrededor de la bounding box de ciertas clases.
 
+    Args:
+        image (Tensor): Imagen original (C,H,W).
+        mask (Tensor): Máscara correspondiente.
+        crop_size (tuple): Tamaño del recorte (alto, ancho).
+
+    Returns:
+        tuple: Imagen y máscara recortadas y redimensionadas al tamaño original.
+    """
     bbox = get_bounding_box(mask, [7,8,11,12])
     top, left, bottom, right = bbox
     center_y = (top + bottom) // 2
@@ -207,29 +314,35 @@ def crop_around_bbox(image, mask, crop_size=(360, 640)):
     start_y = max(center_y - half_h, 0)
     start_x = max(center_x - half_w, 0)
 
-    # Evitar que el crop se salga por abajo/derecha
     end_y = min(start_y + crop_size[0], image.shape[1])
     end_x = min(start_x + crop_size[1], image.shape[2])
 
-    # Ajustar si el recorte es más pequeño por los bordes
     start_y = end_y - crop_size[0]
     start_x = end_x - crop_size[1]
 
     image_cropped = image[:, start_y:end_y, start_x:end_x]
     mask_cropped = mask[:, start_y:end_y, start_x:end_x]
 
-    # Redimensionar al tamaño original
     image_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.BILINEAR)(image_cropped)
     mask_cropped = transforms.Resize((image.shape[1], image.shape[2]), interpolation=InterpolationMode.NEAREST)(mask_cropped)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {crop_around_bbox.__name__}")
-      visualize_with_legend(image_cropped, format_mask(mask_cropped.clone()))
-    '''
+
     return image_cropped, mask_cropped
 
+
 def color_jitter(image, mask, brightness_range=(0.85, 1.1), contrast_range=(0.9, 1.15), saturation_range=(0.95, 1.05)):
-    # Random values for brightness, contrast and saturation
+    """
+    Aplica jitter aleatorio de brillo, contraste y saturación a la imagen, sin modificar la máscara.
+
+    Args:
+        image (Tensor): Imagen a modificar.
+        mask (Tensor): Máscara correspondiente (sin cambios).
+        brightness_range (tuple): Rango para brillo.
+        contrast_range (tuple): Rango para contraste.
+        saturation_range (tuple): Rango para saturación.
+
+    Returns:
+        tuple: Imagen modificada y máscara sin cambios.
+    """
     brightness = random.uniform(*brightness_range)
     contrast = random.uniform(*contrast_range)
     saturation = random.uniform(*saturation_range)
@@ -237,15 +350,24 @@ def color_jitter(image, mask, brightness_range=(0.85, 1.1), contrast_range=(0.9,
     image = F.adjust_brightness(image, brightness)
     image = F.adjust_contrast(image, contrast)
     image = F.adjust_saturation(image, saturation)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {color_jitter.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
+
     return image, mask
+
 
 def strong_color_jitter(image, mask, brightness_range=(0.7, 1.3), contrast_range=(0.7, 1.3), saturation_range=(0.8, 1.2)):
-    # Random values for brightness, contrast and saturation
+    """
+    Aplica jitter de color más agresivo (brillo, contraste, saturación) a la imagen.
+
+    Args:
+        image (Tensor): Imagen a modificar.
+        mask (Tensor): Máscara correspondiente (sin cambios).
+        brightness_range (tuple): Rango para brillo.
+        contrast_range (tuple): Rango para contraste.
+        saturation_range (tuple): Rango para saturación.
+
+    Returns:
+        tuple: Imagen modificada y máscara sin cambios.
+    """
     brightness = random.uniform(*brightness_range)
     contrast = random.uniform(*contrast_range)
     saturation = random.uniform(*saturation_range)
@@ -253,23 +375,27 @@ def strong_color_jitter(image, mask, brightness_range=(0.7, 1.3), contrast_range
     image = F.adjust_brightness(image, brightness)
     image = F.adjust_contrast(image, contrast)
     image = F.adjust_saturation(image, saturation)
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {strong_color_jitter.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
+
     return image, mask
 
+
 def random_affine(image, mask):
-    # 🔧 Ángulo de rotación más limitado
+    """
+    Aplica una transformación afín aleatoria (rotación, traslación, escalado) a imagen y máscara.
+
+    Args:
+        image (Tensor): Imagen a transformar.
+        mask (Tensor): Máscara a transformar.
+
+    Returns:
+        tuple: Imagen y máscara transformadas.
+    """
     angle = random.uniform(-25, 25)
 
-    # 🔧 Traslación más suave (5% del tamaño en lugar de 10%)
     max_dx = int(0.05 * image.shape[2])
     max_dy = int(0.05 * image.shape[1])
     translate = (random.randint(-max_dx, max_dx), random.randint(-max_dy, max_dy))
 
-    # 🔧 Escala más cercana a 1 (menos deformación)
     scale = random.uniform(0.9, 1.1)
 
     image = F.affine(
@@ -280,24 +406,27 @@ def random_affine(image, mask):
         mask, angle=angle, translate=translate, scale=scale, shear=[0.0, 0.0],
         interpolation=InterpolationMode.NEAREST, fill=0
     )
-    '''
-    if random.random() < 0.1:
-      print(f"Estoy en: {random_affine.__name__}")
-      visualize_with_legend(image, format_mask(mask.clone()))
-    '''
+
     return image, mask
 
 
 def elastic_transform(image, mask, alpha=6.0, sigma=2.5):
     """
-    Versión conservadora de elastic_transform.
-    Pequeños desplazamientos para no dañar estructuras anatómicas.
+    Aplica una transformación elástica conservadora para deformar imagen y máscara.
+
+    Args:
+        image (Tensor): Imagen a deformar.
+        mask (Tensor): Máscara a deformar.
+        alpha (float): Parámetro de fuerza del desplazamiento.
+        sigma (float): Parámetro de suavizado.
+
+    Returns:
+        tuple: Imagen y máscara deformadas.
     """
-
     if mask.ndim == 2:
-        mask = mask.unsqueeze(0)  # Convertir a (1, H, W)
+        mask = mask.unsqueeze(0)
 
-    stacked = t.cat([image, mask.float()], dim=0).unsqueeze(0)  # (1, C+1, H, W)
+    stacked = t.cat([image, mask.float()], dim=0).unsqueeze(0)
 
     elastic = K.RandomElasticTransform(
         alpha=t.tensor([alpha, alpha]),
@@ -314,15 +443,23 @@ def elastic_transform(image, mask, alpha=6.0, sigma=2.5):
     return image_deformed, mask_deformed
 
 
-
 def random_resized_crop(image, mask, scale=(0.6, 1.0), ratio=(0.75, 1.33)):
     """
-    Simula RandomResizedCrop manualmente para imagen y máscara.
+    Realiza un recorte aleatorio redimensionado simulando RandomResizedCrop para imagen y máscara.
+
+    Args:
+        image (Tensor): Imagen original.
+        mask (Tensor): Máscara correspondiente.
+        scale (tuple): Rango de escala del área.
+        ratio (tuple): Rango de aspecto (ancho/alto).
+
+    Returns:
+        tuple: Imagen y máscara recortadas y redimensionadas o originales si no es posible recortar.
     """
     _, H, W = image.shape
     area = H * W
 
-    for _ in range(10):  # hasta 10 intentos de encontrar un crop válido
+    for _ in range(10):
         target_area = random.uniform(*scale) * area
         aspect_ratio = random.uniform(*ratio)
 
@@ -336,42 +473,33 @@ def random_resized_crop(image, mask, scale=(0.6, 1.0), ratio=(0.75, 1.33)):
             image_cropped = image[:, top:top+new_h, left:left+new_w]
             mask_cropped = mask[:, top:top+new_h, left:left+new_w]
 
-            # Redimensionar al tamaño original
             image_resized = F.resize(image_cropped, size=(H, W), interpolation=InterpolationMode.BILINEAR)
             mask_resized = F.resize(mask_cropped, size=(H, W), interpolation=InterpolationMode.NEAREST)
 
             return image_resized, mask_resized
 
-    # fallback si no encuentra un crop válido
     return image, mask
 
 
-special_augmentations = [
-    crop_around_bbox,
-    maybe_apply(random_affine, p=0.8),
-    #maybe_apply(elastic_transform, p=0.1),
-    maybe_apply(random_horizontal_flip, p=0.5),
-    maybe_apply(random_vertical_flip, p=0.5),
-    maybe_apply(strong_color_jitter, p=0.9)
-]
-
-normal_augmentations = [
-    maybe_apply(random_resized_crop, p=0.6),
-    maybe_apply(random_rotation, p=0.7),
-    maybe_apply(random_horizontal_flip, p=0.5),
-    maybe_apply(random_vertical_flip, p=0.5),
-    maybe_apply(color_jitter, p=0.8)
-]
-
-
-normal_transform = TransformImages(normal_augmentations)
-
-special_transform = TransformImages(special_augmentations)
-
-#CLASE QUE DEFINE NUESTRO DATASET APLICANDO EL PREPROCESAMIENTO DE ARRIBA
-
 class CustomImageDataset(Dataset):
+    """
+    Dataset personalizado que carga imágenes y máscaras, aplica preprocesamiento y maneja clases minoritarias.
+
+    Args:
+        dataset_path (str): Ruta base del dataset.
+        normal_transform (func): Transformaciones normales a aplicar.
+        special_transform (func): Transformaciones especiales para clases minoritarias.
+    """
+
     def __init__(self, dataset_path, normal_transform=None, special_transform=None):
+        """
+        Inicializa el dataset, cargando rutas y preparando índices para clases minoritarias.
+
+        Args:
+            dataset_path (str): Ruta raíz del dataset.
+            normal_transform (func, opcional): Transformaciones normales.
+            special_transform (func, opcional): Transformaciones especiales.
+        """
         self.dataset_path = dataset_path
         self.normal_transform = normal_transform
         self.special_transform = special_transform
@@ -380,12 +508,11 @@ class CustomImageDataset(Dataset):
         self.minority_indices = []
 
         for dir in sorted(os.listdir(self.dataset_path)):
-            subdir = sorted(os.listdir(os.path.join(self.dataset_path, dir))) # listamos los directorios dentro de cada directorio
+            subdir = sorted(os.listdir(os.path.join(self.dataset_path, dir)))
             for sb in subdir:
                 folder_path = os.path.join(self.dataset_path, dir, sb)
                 all_files = os.listdir(folder_path)
 
-                # Buscar todas las imágenes _endo.png
                 endo_images = sorted([f for f in all_files if f.endswith('_endo.png')])
 
                 for image in endo_images:
@@ -406,7 +533,7 @@ class CustomImageDataset(Dataset):
             mask = format_mask(mask)
             present_classes = mask.unique().tolist()
             if any(c in present_classes for c in [7, 8, 11, 12]):
-                self.minority_indices.extend([i] * 2)  # duplicado mínimo
+                self.minority_indices.extend([i] * 2)
                 if 8 in present_classes:
                     self.minority_indices.extend([i] * 2)
                 if 11 in present_classes:
@@ -414,11 +541,22 @@ class CustomImageDataset(Dataset):
                 if 12 in present_classes:
                     self.minority_indices.append(i)
 
-
     def __len__(self):
+        """
+        Retorna la longitud total del dataset incluyendo duplicados para minorías.
+        """
         return len(self.image_paths) + len(self.minority_indices)
 
     def __getitem__(self, i):
+        """
+        Obtiene la imagen y máscara transformadas según índice, aplicando transformaciones especiales si corresponde.
+
+        Args:
+            i (int): Índice de la muestra.
+
+        Returns:
+            tuple: Imagen y máscara procesadas.
+        """
         if i < len(self.image_paths):
             real_index = i
         else:
@@ -429,30 +567,18 @@ class CustomImageDataset(Dataset):
         image = decode_image(image)
         mask = decode_image(mask)
 
-        image = v2.functional.to_dtype(image, dtype=t.float32, scale=True) #Para normalizar la imagen: (0,1)
+        image = v2.functional.to_dtype(image, dtype=t.float32, scale=True)
         image, mask = crop_foreground_and_resize(image, mask)
 
-        # Usamos la máscara ya cargada y clonada, y evaluamos si contiene clases minoritarias
         has_minority = any(
             cls.item() in [7, 8, 11, 12]
             for cls in t.unique(format_mask(mask.clone()))
         )
         if has_minority and self.special_transform:
             image, mask, applied_transforms = self.special_transform(image, mask)
-            '''
-            if random.random() < 0.05:
-                print("[DEBUG] Ejemplo de transformación de clases minoritarias")
-                print(f"[DEBUG] Transformaciones aplicadas: {applied_transforms}")
-                visualize_with_legend(image, format_mask(mask.clone()))
-             '''
         elif self.normal_transform:
             image, mask, applied_transforms = self.normal_transform(image, mask)
-            '''
-            if random.random() < 0.05:
-                print("[DEBUG] Ejemplo de transformación de clases normales")
-                print(f"[DEBUG] Transformaciones aplicadas: {applied_transforms}")
-                visualize_with_legend(image, format_mask(mask.clone()))
-            '''
+
         mask = format_mask(mask)
         return image, mask
 
@@ -466,3 +592,23 @@ class CustomImageDataset(Dataset):
 
 
 
+special_augmentations = [
+    crop_around_bbox,
+    maybe_apply(random_affine, p=0.8),
+    #maybe_apply(elastic_transform, p=0.1),
+    maybe_apply(random_horizontal_flip, p=0.5),
+    maybe_apply(random_vertical_flip, p=0.5),
+    maybe_apply(strong_color_jitter, p=0.9)
+]
+
+normal_augmentations = [
+    maybe_apply(random_resized_crop, p=0.6),
+    maybe_apply(random_rotation, p=0.7),
+    maybe_apply(random_horizontal_flip, p=0.5),
+    maybe_apply(random_vertical_flip, p=0.5),
+    maybe_apply(color_jitter, p=0.8)
+]
+
+normal_transform = TransformImages(normal_augmentations)
+
+special_transform = TransformImages(special_augmentations)
