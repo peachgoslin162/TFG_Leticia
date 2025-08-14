@@ -9,6 +9,8 @@ import kornia.augmentation as K
 import os
 import config
 
+
+
 def get_foreground_bbox(mask, margin=10):
     """
     Devuelve la bounding box que contiene todito excepto el fondo (clase 0).
@@ -23,12 +25,23 @@ def get_foreground_bbox(mask, margin=10):
     """
     mask_copy = mask.clone()
     mask_copy = format_mask(mask_copy)
+
     foreground = mask_copy != 0
 
     if foreground.sum() == 0:
         return None
 
-    coords = foreground.nonzero(as_tuple=False)
+    coords = foreground.nonzero(as_tuple=False) # .nonzero(as_tuple=False) en PyTorch busca todas las posiciones donde un tensor es distinto de cero (o True si es booleano) y devuelve las coordenadas de esos elementos.
+    '''
+    as_tuple=False (por defecto)
+    Devuelve un solo tensor con forma (N, D) donde:
+    
+    N = número de elementos que cumplen la condición (True o ≠ 0)
+    
+    D = número de dimensiones del tensor.
+    
+    en cambio, as_tuple=True te devuelve una tupla por cada dimensión con cuantos han dado True
+    '''
     top = max(coords[:, 0].min().item() - margin, 0)
     bottom = min(coords[:, 0].max().item() + margin, mask.shape[1] - 1)
     left = max(coords[:, 1].min().item() - margin, 0)
@@ -60,7 +73,7 @@ def crop_foreground_and_resize(image, mask, output_size=config.DESIRED_IMAGE_SIZ
         return image, mask
 
     top, left, bottom, right = bbox
-    image_cropped = image[:, top:bottom+1, left:right+1]
+    image_cropped = image[:, top:bottom+1, left:right+1] #+1 para incluir el final en el indexado
     mask_cropped = mask[:, top:bottom+1, left:right+1]
 
     image_resized = transforms.Resize(output_size, interpolation=InterpolationMode.BILINEAR)(image_cropped)
@@ -74,17 +87,18 @@ def format_mask(mask):
     Convierte una máscara RGB en una máscara de etiquetas numéricas según un mapa de colores a clases.
 
     Parámetros:
-        mask (Tensor): máscara en formato CxHxW.
+
+        mask (Tensor): máscara en formato RBG: (C, H, W), valores en rango [0, 255] al ser la watershed, los 3 canales RGB tienen el mismo valor
 
     Retorna:
-        Tensor: máscara con valores enteros que representan clases.
+        Tensor: máscara con valores enteros que representan clases, con forma (H, W) donde cada píxel contiene el índice entero de la clase correspondiente.
     """
-    mask = mask.permute(1, 2, 0)[:, :, 0]
+    mask = mask.permute(1, 2, 0)[:, :, 0] # pasa a (H, W, C) y se quitan los dos canales sobrantes
 
-    class_mask = t.zeros((mask.shape[0], mask.shape[1]), dtype=t.long)
-    for color_value, class_index in config.ID_TO_CLASS.items():
-        class_mask[mask == color_value] = class_index
+    class_mask = t.zeros((mask.shape[0], mask.shape[1]), dtype=t.long) #se crea una máscara copia que tenga los valores a cero
 
+    for color_value, class_index in config.ID_TO_CLASS.items(): # recorremos cada color del diccionario (sabiendo su indice correspondiente)
+        class_mask[mask == color_value] = class_index # sustituimos en cada pixel por su indice correspondiente mirando si en la mascara original estaba ese color
     return class_mask
 
 
@@ -150,7 +164,7 @@ def resize_quarter(image, mask):
     new_height = int(orig_height * 3 / 4)
     new_width = int(orig_width * 3 / 4)
 
-    resize_transform_img = Resize((new_height, new_width), interpolation=InterpolationMode.BILINEAR)
+    resize_transform_img = Resize((new_height, new_width), interpolation=InterpolationMode.BILINEAR) #Se crea el objeto transformador de resize
     image = resize_transform_img(image)
 
     resize_transform_mask = Resize((new_height, new_width), interpolation=InterpolationMode.NEAREST)
@@ -159,34 +173,7 @@ def resize_quarter(image, mask):
     return image, mask
 
 
-class TransformImages:
-    """
-    Aplica una lista de transformaciones a una imagen y máscara.
 
-    Atributos:
-        augmentations (list): lista de funciones de transformación.
-    """
-
-    def __init__(self, augmentations):
-        self.augmentations = augmentations
-
-    def __call__(self, image, mask):
-        """
-        Aplica todas las transformaciones en orden.
-
-        Parámetros:
-            image (Tensor): imagen a transformar.
-            mask (Tensor): máscara a transformar.
-
-        Retorna:
-            tuple: imagen transformada, máscara transformada, lista de nombres de transformaciones aplicadas.
-        """
-        applied_transforms = []
-        for transform in self.augmentations:
-            transform_name = transform.__name__
-            image, mask = transform(image, mask)
-            applied_transforms.append(transform_name)
-        return image, mask, applied_transforms
 
 
 def random_rotation(image, mask, max_angle=25):
@@ -481,6 +468,24 @@ def random_resized_crop(image, mask, scale=(0.6, 1.0), ratio=(0.75, 1.33)):
     return image, mask
 
 
+
+special_augmentations = [
+    crop_around_bbox,
+    maybe_apply(random_affine, p=0.8),
+    #maybe_apply(elastic_transform, p=0.1),
+    maybe_apply(random_horizontal_flip, p=0.5),
+    maybe_apply(random_vertical_flip, p=0.5),
+    maybe_apply(strong_color_jitter, p=0.9)
+]
+
+normal_augmentations = [
+    maybe_apply(random_resized_crop, p=0.6),
+    maybe_apply(random_rotation, p=0.7),
+    maybe_apply(random_horizontal_flip, p=0.5),
+    maybe_apply(random_vertical_flip, p=0.5),
+    maybe_apply(color_jitter, p=0.8)
+]
+
 class CustomImageDataset(Dataset):
     """
     Dataset personalizado que carga imágenes y máscaras, aplica preprocesamiento y maneja clases minoritarias.
@@ -516,7 +521,7 @@ class CustomImageDataset(Dataset):
                 endo_images = sorted([f for f in all_files if f.endswith('_endo.png')])
 
                 for image in endo_images:
-                    mask = image.replace('_endo.png', '_endo_watershed_mask.png')
+                    mask = image.replace('_endo.png', '_endo_watershed_mask.png') # replace() en Python es un metodo de strings que busca un fragmento de texto y lo sustituye por otro.
                     image_path = os.path.join(folder_path, image)
                     mask_path = os.path.join(folder_path, mask)
 
@@ -529,17 +534,37 @@ class CustomImageDataset(Dataset):
         for i in range(len(self.mask_paths)):
             mask = decode_image(self.mask_paths[i])
             image = decode_image(self.image_paths[i])
+            '''
+            Decodifica una imagen en un tensor de tipo uint8, ya sea desde una ruta de archivo o desde bytes codificados en crudo.
+            
+            uint8 → “unsigned integer 8-bit” Solo guarda enteros entre 0 y 255 (porque 2⁸ = 256 valores posibles).
+            
+            tensor → estructura de datos de PyTorch (como un array de NumPy, pero con soporte para GPU y operaciones optimizadas).
+            
+            En imágenes, normalmente tendrá forma (C, H, W) → canales, alto y ancho.
+            
+            Si es RGB, C = 3; si es en escala de grises, C = 1.
+            '''
+
             _, mask = resize_quarter(image, mask)
             mask = format_mask(mask)
-            present_classes = mask.unique().tolist()
-            if any(c in present_classes for c in [7, 8, 11, 12]):
-                self.minority_indices.extend([i] * 2)
+
+            present_classes = mask.unique().tolist() #lo pasamos de tensor a lista
+            if any(c in present_classes for c in [7, 8, 11, 12]): # any(...) → devuelve True si alguna condición es cierta.
+                                                                  # (c in present_classes for c in [...]) → generador que va evaluando cada valor y se detiene al primer True.
+                self.minority_indices.extend([i] * 2) # extend(iterable) → añade cada elemento de un iterable a la lista, “desempaquetándolo”.
+                '''
+                ejemplo:
+                i = 5
+                resultado = [i] * 2
+                print(resultado)  # [5, 5]
+                '''
                 if 8 in present_classes:
                     self.minority_indices.extend([i] * 2)
                 if 11 in present_classes:
                     self.minority_indices.extend([i] * 3)
                 if 12 in present_classes:
-                    self.minority_indices.append(i)
+                    self.minority_indices.append(i) # append(x) → añade un solo elemento al final de la lista, sin importar si es una lista u otro tipo de objeto.
 
     def __len__(self):
         """
@@ -567,7 +592,7 @@ class CustomImageDataset(Dataset):
         image = decode_image(image)
         mask = decode_image(mask)
 
-        image = v2.functional.to_dtype(image, dtype=t.float32, scale=True)
+        image = v2.functional.to_dtype(image, dtype=t.float32, scale=True) # Convierte la imagen a float32 y normaliza los valores de 0–255 a un rango 0–1.
         image, mask = crop_foreground_and_resize(image, mask)
 
         has_minority = any(
@@ -586,29 +611,35 @@ class CustomImageDataset(Dataset):
         self.normal_transform = None
         self.special_transform = None
 
-    def set_transform_true(self):
+    def set_transform_true(self, normal_transform, special_transform):
         self.normal_transform = normal_transform
         self.special_transform = special_transform
 
+class TransformImages:
+    """
+    Aplica una lista de transformaciones a una imagen y máscara.
 
+    Atributos:
+        augmentations (list): lista de funciones de transformación.
+    """
 
-special_augmentations = [
-    crop_around_bbox,
-    maybe_apply(random_affine, p=0.8),
-    #maybe_apply(elastic_transform, p=0.1),
-    maybe_apply(random_horizontal_flip, p=0.5),
-    maybe_apply(random_vertical_flip, p=0.5),
-    maybe_apply(strong_color_jitter, p=0.9)
-]
+    def __init__(self, augmentations):
+        self.augmentations = augmentations
 
-normal_augmentations = [
-    maybe_apply(random_resized_crop, p=0.6),
-    maybe_apply(random_rotation, p=0.7),
-    maybe_apply(random_horizontal_flip, p=0.5),
-    maybe_apply(random_vertical_flip, p=0.5),
-    maybe_apply(color_jitter, p=0.8)
-]
+    def __call__(self, image, mask):
+        """
+        Aplica todas las transformaciones en orden.
 
-normal_transform = TransformImages(normal_augmentations)
+        Parámetros:
+            image (Tensor): imagen a transformar.
+            mask (Tensor): máscara a transformar.
 
-special_transform = TransformImages(special_augmentations)
+        Retorna:
+            tuple: imagen transformada, máscara transformada, lista de nombres de transformaciones aplicadas.
+        """
+        applied_transforms = []
+        for transform in self.augmentations:
+            transform_name = transform.__name__
+            image, mask = transform(image, mask)
+            applied_transforms.append(transform_name)
+        return image, mask, applied_transforms

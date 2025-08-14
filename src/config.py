@@ -28,13 +28,15 @@ GAMMA = 1.5
 WEIGHT_DECAY = 1e-4
 
 # Paths leídos de variables de entorno
-CHOLECSEG8K_PATH = os.getenv('CHOLECSEG8K_PATH')
-OUTPUT_PATH = os.getenv('OUTPUT_PATH')
+DATASET_PATH = os.getenv('DATASET_PATH')
+OUTPUT_DIR = os.getenv('OUTPUT_DIR')
 
 # CAMBIAR: usar variables de entorno para checkpoint también
 
-CHECKPOINT_PATH = os.path.join(OUTPUT_PATH, "checkpoint.pth") if OUTPUT_PATH else None
+CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pth") if OUTPUT_DIR else None
 LAST_CHECKPOINT_PATH = os.getenv('LAST_CHECKPOINT_PATH', '/kaggle/input/epoch_50/pytorch/default/1/best_checkpoint_epoch_50.pth')
+
+METRICS_DIR = os.path.join(OUTPUT_DIR, "plots")
 
 # Diccionario para mapear colores RGB a clases
 ID_TO_CLASS = {
@@ -88,3 +90,6 @@ PASTEL_COLORS = [
 ]
 
 NORMALIZED_COLORS = [(r / 255, g / 255, b / 255) for r, g, b in PASTEL_COLORS]
+
+
+START_FROM_CHECKPOINT = False
