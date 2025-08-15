@@ -124,40 +124,6 @@ class EarlyStopping:
             self.counter = 0
 
 
-def calculate_percentages(cm):
-    """
-    Calcula porcentajes de aciertos, falsos positivos y falsos negativos
-    para cada clase a partir de una matriz de confusión.
-
-    Parámetros:
-        cm (ndarray): matriz de confusión.
-
-    Retorna:
-        correct (ndarray): % de aciertos por clase.
-        false_positives (ndarray): % de falsos positivos por clase.
-        false_negatives (ndarray): % de falsos negativos por clase.
-    """
-    row_sums = cm.sum(axis=1)  # Total de ejemplos reales por clase
-    col_sums = cm.sum(axis=0)  # Total de predicciones por clase
-
-    # Inicializar arrays de resultados
-    correct = np.zeros(len(cm))
-    false_positives = np.zeros(len(cm))
-    false_negatives = np.zeros(len(cm))
-
-    for i in range(len(cm)):
-        if row_sums[i] == 0:  # Si no hay ejemplos reales de esa clase
-            correct[i] = np.nan
-            false_positives[i] = np.nan
-            false_negatives[i] = np.nan
-        else:
-            correct[i] = cm[i, i] / row_sums[i] * 100
-            false_positives[i] = (col_sums[i] - cm[i, i]) / col_sums[i] * 100
-            false_negatives[i] = (row_sums[i] - cm[i, i]) / row_sums[i] * 100
-
-    return correct, false_positives, false_negatives
-
-
 def calculate_confusion_metrics(cm):
     """
     Calcula métricas clásicas de la matriz de confusión:

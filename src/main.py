@@ -246,21 +246,6 @@ def main():
 
     visualization.show_confusion_matrix(cm)
 
-    '''
-    # Calcular los porcentajes
-    correct, false_positives, false_negatives = util.calculate_percentages(cm)
-
-    # Imprimir los resultados para cada clase
-    for i in range(len(correct)):
-        print(f"Clase {i}:")
-        print(f"  - Predicción correcta: {correct[i]:.2f}%")
-        print(f"  - Falsos positivos: {false_positives[i]:.2f}%")
-        print(f"  - Falsos negativos: {false_negatives[i]:.2f}%\n")
-        print()
-
-    # confusion_details(cm)
-    '''
-
     metrics = util.calculate_confusion_metrics(cm)
 
     # Imprimir resultados
