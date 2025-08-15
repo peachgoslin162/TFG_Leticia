@@ -55,3 +55,10 @@ def download_cholecseg8k(output_dir="./data/cholecseg8k"):
 if __name__ == "__main__":
     setup_kaggle_token()
     download_cholecseg8k()
+
+
+'''
+Si se ejecuta download_dataset.py → se configura el token y descarga el dataset.
+
+Si se importa download_dataset desde otro script → no descarga nada automáticamente, pero se puede llamar a esas funciones manualmente.
+'''

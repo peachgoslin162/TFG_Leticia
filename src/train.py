@@ -34,6 +34,7 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
 
     for batch, (X, y) in enumerate(train_dataloader):
         X, y = X.to(device), y.to(device)
+
         # Compute prediction and loss
 
         assert y.max() < config.NUM_CLASSES, f"Valor fuera de rango en la máscara: {y.max()}"

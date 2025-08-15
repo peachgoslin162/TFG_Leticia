@@ -40,7 +40,7 @@ def plot_metrics(train_losses, val_losses, pixel_accuracies, mean_ious):
     print(f"Gráfico de precisión guardado: {acc_path}")
     plt.close(fig2)
 
-    # --- Gráfico opcional de IoU ---
+    # --- Gráfico de IoU ---
     fig3 = plt.figure(figsize=(15, 8))
     plt.plot(epochs_range, mean_ious, label="Mean IoU", color="red")
     plt.xlabel("Epochs")
@@ -67,7 +67,7 @@ def show_confusion_matrix(cm):
 
 '''
 cm: This is the data being visualized, typically a 2D array or DataFrame (e.g., a confusion matrix).
-annot=True: Displays the values of the cells directly on the heatmap.
+annot=True: Displays the values of the cells directly on the heatmap, annot=False → Solo verías la escala de colores, sin texto numérico.
 fmt="d": Formats the annotations as integers (useful for whole numbers like counts).
 cmap="Blues": Sets the color map to shades of blue.
 cbar=False: Disables the color bar on the side of the heatmap.
@@ -81,20 +81,25 @@ def show_image_comparison(image, pred_mask, true_mask):
     ax[0].set_title('Original Image')
     ax[0].axis('off')
 
-    pred_mask = pred_mask.argmax(dim=0)
+    pred_mask = pred_mask.argmax(dim=0) # Cuando quieres convertir de probabilidades por clase a clase más probable, usas .argmax() sobre el eje de las clases (C).
     ax[1].imshow(pred_mask.cpu(), cmap=cmap, vmin=0, vmax=config.NUM_CLASSES - 1)
     ax[1].set_title('Predicted Mask')
     ax[1].axis('off')
 
-    im = ax[2].imshow(true_mask.cpu(), cmap=cmap, vmin=0, vmax=config.NUM_CLASSES - 1)
+    ax[2].imshow(true_mask.cpu(), cmap=cmap, vmin=0, vmax=config.NUM_CLASSES - 1)
     ax[2].set_title('Ground Truth Mask')
     ax[2].axis('off')
 
+
+    # Para crear y mostrar una leyenda personalizada en el gráfico
     unique_classes = t.unique(true_mask.cpu())
     labels = [config.CLASS_NAME_MAPPING[i.item()] for i in unique_classes]
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=cmap(i), markersize=10) for i in unique_classes]
     ax[2].legend(handles, labels, title="Clases", loc="upper right", bbox_to_anchor=(1.65, 1))
 
+    '''
+    vmin y vmax en imshow de Matplotlib son los valores mínimo y máximo del rango de colores que se van a mapear al colormap (cmap).
+    '''
     plt.tight_layout()
     plt.show()  # Muestra en pantalla
     return fig  # Devuelve el objeto para guardarlo
