@@ -68,7 +68,7 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
     return (running_loss / batch_num)
 
 
-def test_loop(val_dataloader, model, loss_fn, device, use_tta=False):
+def test_loop(val_dataloader, model, loss_fn, device):
     """
     Ejecuta la evaluación del modelo en un conjunto de validación.
 
@@ -201,7 +201,7 @@ def cosine_gamma(epoch, max_epochs, gamma_min=1.5, gamma_max=3.0):
     return gamma_min + 0.5 * (gamma_max - gamma_min) * (1 - math.cos(cos_inner))
 
 
-def compute_confusion_matrix_incremental(model, dataloader, device, num_classes):
+def compute_confusion_matrix_incremental(model, dataloader, device, num_classes=config.NUM_CLASSES):
     """
     Calcula la matriz de confusión acumulativa sin almacenar todas las predicciones en memoria.
     """
@@ -238,7 +238,7 @@ def compute_confusion_matrix(pred, y_true):
     y_true = fnn.interpolate(y_true.float(), size=pred.shape[1:], mode="nearest")
     y_true = y_true.squeeze(1).long()
     y_true = y_true.cpu().numpy()
-    cm = confusion_matrix(y_true.flatten(), pred.flatten(), labels=range(13))
+    cm = confusion_matrix(y_true.flatten(), pred.flatten(), labels=range(config.NUM_CLASSES))
     return cm
 
 
