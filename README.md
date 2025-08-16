@@ -1,4 +1,4 @@
-# PFG: Segmentación Semántica en Cirugía Laparoscópica con Optimización para Clases Minoritarias
+# TFG: Segmentación Semántica en Cirugía Laparoscópica con Optimización para Clases Minoritarias
 Se ha desarrollado de una red neuronal convolucional para su uso en segmentación semántica de imágenes laparoscópicas de colecistectomía.
 El modelo ha sido entrenado a partir de un conjunto de imágenes reales de cirugías (dataset CholecSeg8k), incorporando técnicas de aumento de datos y estrategias específicas para optimizar la segmentación de clases minoritarias, con el fin de mejorar su capacidad de generalización frente a distintos contextos quirúrgicos y condiciones visuales.
 El propósito principal de dicho modelo es identificar y delimitar tanto los distintos elementos anatómicos como las herramientas quirúrgicas más comunes presentes en el campo operatorio.
