@@ -38,7 +38,7 @@ Introduce el siguiente comando para descargar y extraer el dataset:
 python src/download_dataset.py
 ```
 
-## Como ejecutar un entrenamiento del modelo durante 50 épocas u 11 horas (límite de Kaggle)
+## Cómo ejecutar un entrenamiento del modelo durante 50 épocas u 11 horas (límite de Kaggle)
 
 Introduce el siguiente comando:
 
