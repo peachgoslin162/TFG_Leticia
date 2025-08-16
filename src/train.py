@@ -242,7 +242,7 @@ def compute_confusion_matrix(pred, y_true):
     return cm
 
 
-def compute_iou(y_pred, y_true, num_classes=13):
+def compute_iou(y_pred, y_true, num_classes=config.NUM_CLASSES):
     """
     Versión mejorada que:
     1. Ignora completamente las clases no presentes
