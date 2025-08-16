@@ -42,6 +42,8 @@ def download_cholecseg8k(output_dir="./data/cholecseg8k"):
     Parámetros:
         output_dir (str): Carpeta donde se guardará el dataset.
     """
+
+
     os.makedirs(output_dir, exist_ok=True)
 
     from kaggle.api.kaggle_api_extended import KaggleApi

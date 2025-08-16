@@ -21,6 +21,13 @@ En la raíz del proyecto, crea un archivo llamado `.env` con este contenido:
 KAGGLE_USERNAME=tu_usuario_kaggle
 KAGGLE_KEY=tu_key_kaggle
 
+
+Adicionalmente, para correr y guardar los resultados del modelo se deberá indicar:
+
+DATASET_PATH=./data/cholecseg8k
+OUTPUT_DIR=directorio_salida_de_datos
+
+
 Reemplaza `tu_usuario_kaggle` y `tu_key_kaggle` por los valores que aparecen en el archivo `kaggle.json`.
 
 ### 3. Descargar el dataset
@@ -29,3 +36,4 @@ Ejecuta el siguiente comando para descargar y extraer el dataset:
 
 ```bash
 python src/download_dataset.py
+
