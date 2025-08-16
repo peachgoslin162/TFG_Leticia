@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import config
 import matplotlib.colors as mcolors
-
+import numpy as np
 
 def plot_metrics(train_losses, val_losses, pixel_accuracies, mean_ious):
     epochs_range = range(1, len(train_losses) + 1)
@@ -103,3 +103,42 @@ def show_image_comparison(image, pred_mask, true_mask):
     plt.tight_layout()
     plt.show()  # Muestra en pantalla
     return fig  # Devuelve el objeto para guardarlo
+
+def visualize_with_legend(image, mask, num_classes=config.NUM_CLASSES):
+    """
+    Visualiza una imagen junto con su máscara de clases y añade una leyenda.
+
+    Args:
+        image (Tensor o ndarray): Imagen a mostrar, puede tener forma (C, H, W) o (H, W, C).
+        mask (ndarray): Máscara de clases correspondiente a la imagen, con valores enteros representando cada clase.
+        num_classes (int, opcional): Número total de clases, usado para normalizar el colormap.
+                                     Por defecto se toma de config.NUM_CLASSES.
+
+    Returns:
+        None: La función muestra la imagen y la máscara con leyenda usando matplotlib.
+    """
+
+    if image.shape[0] == 3 or image.shape[0] == 4:
+        image = image.permute(1, 2, 0)
+
+    cmap = mcolors.ListedColormap(config.NORMALIZED_COLORS)
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+    ax[0].imshow(image)
+    ax[0].set_title('Imagen')
+    ax[0].axis('off')
+
+    im = ax[1].imshow(mask, cmap=cmap, vmin=0, vmax=num_classes - 1)
+    ax[1].set_title('Máscara con Índices de Clase')
+    ax[1].axis('off')
+
+    unique_classes = np.unique(mask)
+    labels = [config.CLASS_NAME_MAPPING[i] for i in unique_classes]
+
+    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=cmap(i), markersize=10)
+               for i in unique_classes]
+
+    ax[1].legend(handles, labels, title="Clases", loc="upper right", bbox_to_anchor=(1.65, 1))
+
+    plt.show()
+    plt.close()

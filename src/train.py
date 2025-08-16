@@ -34,12 +34,17 @@ def train_loop(train_dataloader, model, loss_fn, optimizer, device):
 
     for batch, (X, y) in enumerate(train_dataloader):
         X, y = X.to(device), y.to(device)
+        # X = (batch_size, canales, alto, ancho)
+        # y = (batch_size, alto, ancho)
 
         # Compute prediction and loss
 
-        assert y.max() < config.NUM_CLASSES, f"Valor fuera de rango en la máscara: {y.max()}"
+        assert y.max() < config.NUM_CLASSES, f"Valor fuera de rango en la máscara: {y.max()}" #.max() mira el valor maximo dentro del tensor
+
         pred = model(X)
-        y = fnn.interpolate(y.unsqueeze(1).float(), size=pred.shape[2:], mode="nearest").squeeze(1).long()
+        y = fnn.interpolate(y.unsqueeze(1).float(), size=pred.shape[2:], mode="nearest").squeeze(1).long() # redimensiona las máscaras y para que tengan el mismo tamaño que la predicción pred
+        # y.unsqueeze(1) : (batch_size, H, W) pasa a (batch_size, 1, H, W).
+
         loss = loss_fn(pred, y)
 
         if loss.item() > 15.0:
@@ -85,9 +90,7 @@ def test_loop(val_dataloader, model, loss_fn, device, use_tta=False):
     batch_num = len(val_dataloader)
     val_dataset_size = len(val_dataloader.dataset)
     batch_size = val_dataloader.batch_size
-    num_classes = 13
-    iou_per_epoch = t.zeros(num_classes)
-    has_minority = False
+    iou_per_epoch = t.zeros(config.NUM_CLASSES)
     model.eval()
 
     with t.no_grad():

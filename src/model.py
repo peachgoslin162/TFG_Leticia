@@ -58,7 +58,7 @@ class AttentionGate(nn.Module):
 
         # Proyección de la salida del decoder
         self.decoder_projection = nn.Sequential(
-            nn.Conv2d(decoder_channels, intermediate_channels, kernel_size=1),
+            nn.Conv2d(decoder_channels, intermediate_channels, kernel_size=1), # Reduce la cantidad de canales de la salida del decoder a intermediate_channels usando un 1x1 Conv.
             nn.BatchNorm2d(intermediate_channels)
         )
 

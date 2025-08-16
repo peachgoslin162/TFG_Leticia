@@ -5,7 +5,7 @@ import train
 import visualization
 import config
 import torch as t
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import DataLoader, random_split
 import os
 import numpy as np
 import matplotlib.pyplot as plt

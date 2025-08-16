@@ -138,8 +138,8 @@ def calculate_confusion_metrics(cm):
     Returns:
         dict: Diccionario con arrays de porcentajes para cada métrica.
     """
-    row_sums = cm.sum(axis=1)  # Total de verdaderos por clase
-    col_sums = cm.sum(axis=0)  # Total de predicciones por clase
+    row_sums = cm.sum(axis=1)  # cuantas veces aparece esa clase, cuando haces una suma con axis=N, N es el eje que desaparece en la operación.
+    col_sums = cm.sum(axis=0)  # cuantas veces se predijo cada clase
     total = cm.sum()  # Total de muestras
 
     metrics = {
@@ -150,10 +150,12 @@ def calculate_confusion_metrics(cm):
     }
 
     for i in range(len(cm)):
-        TP = cm[i, i]
-        FP = col_sums[i] - TP
-        FN = row_sums[i] - TP
-        TN = total - row_sums[i] - FP
+        TP = cm[i, i] #aciertos
+        FP = col_sums[i] - TP #cuantas veces se predijo la clase - cuantos aciertos verdaderos = cuantas veces se predijo mal
+        FN = row_sums[i] - TP #cuantas veces aparece la clase - cuantas veces predice y acierta = veces que sí era clase i pero el modelo no lo predijo como i
+        TN = total - row_sums[i] - FP # total de muestras - cuantas veces aparece la clase = numero de veces que no aparece la clase
+                                      # numero de veces que no aparece la clase  - cuantas veces se predijo i cuando no era
+        # Son los casos que NO son de la clase i y además el modelo NO los predijo como i.
 
         # Recall (Sensibilidad)
         metrics['recall'][i] = (TP / row_sums[i] * 100) if row_sums[i] > 0 else np.nan

@@ -9,8 +9,6 @@ import kornia.augmentation as K
 import os
 import config
 
-
-
 def get_foreground_bbox(mask, margin=10):
     """
     Devuelve la bounding box que contiene todito excepto el fondo (clase 0).
