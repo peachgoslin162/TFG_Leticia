@@ -32,8 +32,17 @@ Reemplaza `tu_usuario_kaggle` y `tu_key_kaggle` por los valores que aparecen en 
 
 ### 3. Descargar el dataset
 
-Ejecuta el siguiente comando para descargar y extraer el dataset:
+Introduce el siguiente comando para descargar y extraer el dataset:
 
 ```bash
 python src/download_dataset.py
+
+
+## Pasos para ejecutar un entrenamiento del modelo durante 50 épocas u 11 horas (límite de Kaggle)
+
+Introduce el siguiente comando:
+
+```bash
+python src/main.py
+
 
